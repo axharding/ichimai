@@ -1,0 +1,1275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ichimai</title>
+<style>body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@500;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* Layout: one screen. Top half is the folding stage (canvas + step panel), bottom half scrolls the catalog. */
+:root {
+  --bg: #f3f2ee;        /* shironeri, unbleached silk */
+  --stage: #fbfaf7;
+  --panel: #f7f6f2;
+  --ink: #23211e;       /* sumi */
+  --ink-2: #625e57;
+  --ink-3: #96918a;
+  --line: #e0ddd5;
+  --chip: #ebe9e3;
+  --accent: #2c4c70;    /* ai-iro indigo */
+  --accent-ink: #ffffff;
+  --accent-soft: #e2e8ef;
+  --seal: #b5412d;      /* shu, used for the seal and mountain folds */
+  --valley: #2c4c70;
+  --mountain: #b5412d;
+  --edge: rgba(20, 18, 15, .5);
+  --shadow: rgba(40, 32, 20, .16);
+  --display: "Shippori Mincho", "Hiragino Mincho ProN", "Yu Mincho", Georgia, serif;
+  --body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161614; --stage: #1d1c1a; --panel: #1a1917; --ink: #ebe8e1; --ink-2: #aba69d; --ink-3: #78746d;
+    --line: #2f2d29; --chip: #262522; --accent: #a4bddb; --accent-ink: #12161b; --accent-soft: #24303d;
+    --seal: #d4664f; --valley: #a4bddb; --mountain: #e27e64; --edge: rgba(0, 0, 0, .55); --shadow: rgba(0, 0, 0, .45);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161614; --stage: #1d1c1a; --panel: #1a1917; --ink: #ebe8e1; --ink-2: #aba69d; --ink-3: #78746d;
+  --line: #2f2d29; --chip: #262522; --accent: #a4bddb; --accent-ink: #12161b; --accent-soft: #24303d;
+  --seal: #d4664f; --valley: #a4bddb; --mountain: #e27e64; --edge: rgba(0, 0, 0, .55); --shadow: rgba(0, 0, 0, .45);
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.55; }
+* { box-sizing: border-box; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1.1fr) minmax(0, .9fr); }
+
+/* header */
+.top { display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.seal { width: 30px; height: 30px; border-radius: 4px; background: var(--seal); color: #fff; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 18px; line-height: 1; flex: none; }
+.brand { display: flex; align-items: baseline; gap: 8px; }
+.brand b { font-family: var(--display); font-weight: 700; font-size: 21px; letter-spacing: .02em; }
+.brand span { font-family: var(--display); color: var(--ink-3); font-size: 14px; }
+.tagline { color: var(--ink-2); font-size: 13px; margin-left: auto; }
+
+/* stage */
+.stage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); min-height: 0; border-bottom: 1px solid var(--line); background: var(--stage); }
+.canvas { position: relative; min-height: 0; min-width: 0; }
+#stage-svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.paper { filter: drop-shadow(0 2px 3px var(--shadow)); }
+.facet { stroke: none; }
+.edge { stroke: var(--edge); stroke-width: 1; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.crease { stroke: rgba(0, 0, 0, .28); stroke-width: .8; vector-effect: non-scaling-stroke; }
+.gline { stroke-width: 1.8; vector-effect: non-scaling-stroke; fill: none; stroke-linecap: round; }
+.gline.valley { stroke: var(--valley); stroke-dasharray: 9 6; }
+.gline.mountain { stroke: var(--mountain); stroke-dasharray: 12 4 2 4; }
+.abody { fill: none; stroke: var(--ink); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.ahead { fill: var(--ink); stroke: var(--ink); stroke-width: 1.4; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.ahead.open { fill: var(--stage); }
+
+.stage-title { position: absolute; top: 14px; left: 20px; display: flex; align-items: baseline; gap: 10px; pointer-events: none; }
+.stage-title h1 { margin: 0; font-family: var(--display); font-weight: 600; font-size: 22px; line-height: 1.2; text-wrap: balance; }
+.stage-title span { font-family: var(--display); color: var(--ink-3); font-size: 15px; }
+.legend { position: absolute; top: 16px; right: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-2); pointer-events: none; }
+.legend div { display: flex; align-items: center; gap: 8px; }
+.legend svg { width: 34px; height: 6px; overflow: visible; }
+.pill { position: absolute; left: 20px; bottom: 14px; padding: 3px 12px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); font-size: 12.5px; color: var(--ink-2); letter-spacing: .03em; white-space: nowrap; }
+.pill:empty { display: none; }
+
+/* step panel */
+.panel { border-left: 1px solid var(--line); background: var(--panel); padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; overflow: auto; min-height: 0; }
+.p-head h2 { margin: 0; font-family: var(--display); font-weight: 600; font-size: 19px; }
+.p-head p { margin: 4px 0 0; color: var(--ink-2); font-size: 13.5px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 4px; background: var(--chip); font-size: 12.5px; color: var(--ink-2); }
+.sw { width: 11px; height: 11px; border-radius: 2px; border: 1px solid rgba(0, 0, 0, .25); margin-right: -3px; }
+.sw + .sw { margin-right: 0; }
+.lvl { display: inline-flex; gap: 2px; }
+.lvl i { width: 6px; height: 6px; border-radius: 50%; border: 1px solid var(--ink-2); }
+.lvl[data-l="1"] i:nth-child(-n+1), .lvl[data-l="2"] i:nth-child(-n+2), .lvl[data-l="3"] i { background: var(--ink-2); }
+
+.stepline { display: flex; align-items: baseline; gap: 8px; border-top: 1px solid var(--line); padding-top: 14px; }
+.stepline .label { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.stepline .num { font-family: var(--display); font-weight: 700; font-size: 34px; line-height: 1; font-variant-numeric: tabular-nums; }
+.stepline .of { color: var(--ink-3); font-size: 15px; font-variant-numeric: tabular-nums; }
+.instr { margin: 0; font-size: 16px; line-height: 1.6; min-height: 3.2em; max-width: 40ch; }
+
+.btn { position: relative; display: inline-flex; align-items: baseline; justify-content: center; gap: 7px; height: 40px; padding: 0 4px; border: 0; border-radius: 0; background: none; cursor: pointer; font-family: var(--display); font-size: 15px; font-weight: 500; color: var(--ink-2); line-height: 40px; white-space: nowrap; }
+.btn::after { content: ""; position: absolute; left: 4px; right: 4px; bottom: 7px; height: 1px; background: currentColor; transform: scaleX(0); transition: transform .25s ease; }
+.btn:hover:not(:disabled) { color: var(--ink); }
+.btn:hover:not(:disabled)::after { transform: scaleX(1); }
+.btn:disabled { color: var(--ink-3); opacity: .55; cursor: default; }
+.btn.primary { color: var(--ink); font-weight: 600; }
+.btn.primary::after { transform: scaleX(1); background: var(--ink); }
+.btn svg { width: 13px; height: 13px; flex: none; align-self: center; }
+.btn small { font-family: var(--display); font-size: 11.5px; font-weight: 500; color: var(--ink-3); }
+
+/* transport bar under the animation */
+.viewer { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.viewer .canvas { flex: 1 1 auto; }
+.transport { flex: none; border-top: 1px solid var(--line); background: var(--panel); }
+.anim { height: 3px; background: var(--line); overflow: hidden; }
+#anim-fill { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left; transform: scaleX(0); }
+.tbar { display: flex; align-items: center; gap: 22px; padding: 6px 20px; }
+.steps { display: flex; gap: 4px; flex: 1 1 auto; justify-content: center; flex-wrap: wrap; min-width: 0; }
+.sn { position: relative; width: 28px; height: 34px; border: 0; background: none; cursor: pointer; padding: 0; font-family: var(--display); font-size: 15px; font-variant-numeric: tabular-nums; color: var(--ink-3); }
+.sn::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: 3px; height: 2px; background: var(--ink); transform: scaleX(0); transition: transform .2s ease; }
+.sn:hover { color: var(--ink); }
+.sn.past { color: var(--ink-2); }
+.sn[aria-current="step"] { color: var(--ink); font-weight: 700; }
+.sn[aria-current="step"]::after { transform: scaleX(1); }
+.steps { flex-wrap: nowrap; align-items: center; }
+.pg { width: 26px; height: 34px; border: 0; background: none; padding: 0; cursor: pointer; font-family: var(--display); font-size: 17px; line-height: 30px; color: var(--ink-3); }
+.pg:hover:not(:disabled) { color: var(--ink); }
+.pg:disabled { opacity: .3; cursor: default; }
+.pg-gap { width: 6px; flex: none; }
+#next.ready svg { animation: drift 1.8s ease-in-out infinite; }
+@keyframes drift { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
+.toggles { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13.5px; color: var(--ink-2); }
+.toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.toggle input { appearance: none; width: 13px; height: 13px; border: 1px solid var(--ink-3); border-radius: 0; background: none; position: relative; cursor: pointer; margin: 0; }
+.toggle input::after { content: ""; position: absolute; inset: 2px; background: var(--ink); transform: scale(0); transition: transform .15s; }
+.toggle input:checked { border-color: var(--ink); }
+.toggle input:checked::after { transform: scale(1); }
+.toggle:has(input:checked) { color: var(--ink); }
+.keys { font-size: 12px; color: var(--ink-3); margin-top: auto; }
+kbd { font-family: var(--body); font-size: 11px; padding: 0 5px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 3px; background: var(--bg); color: var(--ink-2); }
+
+/* catalog */
+.catalog { overflow: auto; min-height: 0; }
+.catalog-inner { max-width: 1240px; margin: 0 auto; padding: 18px 20px 40px; display: flex; flex-direction: column; gap: 16px; }
+.toolbar { display: flex; flex-direction: column; gap: 12px; }
+.search { position: relative; display: block; max-width: 520px; }
+.search svg { position: absolute; left: 12px; top: 50%; width: 16px; height: 16px; transform: translateY(-50%); color: var(--ink-3); }
+#q { width: 100%; height: 42px; padding: 0 12px 0 38px; border-radius: 6px; border: 1px solid var(--line); background: var(--stage); color: var(--ink); font: inherit; font-size: 15px; }
+#q::placeholder { color: var(--ink-3); }
+#filters { display: flex; flex-wrap: wrap; gap: 10px 28px; }
+.fgroup { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.flabel { font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 11px; border-radius: 999px; border: 1px solid var(--line); background: transparent; cursor: pointer; font-size: 13.5px; }
+.chip small { color: var(--ink-3); font-size: 11.5px; }
+.chip .cnt { font-size: 11px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.chip:hover:not(:disabled) { border-color: var(--ink-3); }
+.chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.chip[aria-pressed="true"] small, .chip[aria-pressed="true"] .cnt { color: inherit; opacity: .7; }
+.chip:disabled { opacity: .4; cursor: default; }
+.results-head { display: flex; align-items: center; gap: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+#count { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.linkbtn { border: 0; background: none; padding: 0; color: var(--accent); cursor: pointer; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+
+#grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.card { display: flex; flex-direction: column; text-align: left; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--stage); cursor: pointer; overflow: hidden; transition: border-color .15s, transform .15s; }
+.card:hover { border-color: var(--ink-3); transform: translateY(-1px); }
+.card[aria-current="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.thumb { display: block; aspect-ratio: 4 / 3; max-width: 100%; padding: 14px; }
+.thumb svg { width: 100%; height: 100%; display: block; }
+.card-body { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px 12px; border-top: 1px solid var(--line); background: var(--panel); }
+.card-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.cname { font-family: var(--display); font-weight: 600; font-size: 16px; }
+.cjp { font-family: var(--display); color: var(--ink-3); font-size: 12.5px; white-space: nowrap; }
+.card-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; font-size: 12px; color: var(--ink-2); }
+.card-meta .sep { color: var(--ink-3); }
+.two { margin-left: 2px; padding: 0 6px; border-radius: 3px; border: 1px solid var(--seal); color: var(--seal); font-size: 11px; }
+.empty { padding: 30px 0; color: var(--ink-2); }
+
+@media (max-width: 820px) {
+  .app { grid-template-rows: auto minmax(0, 1.35fr) minmax(0, .65fr); }
+  .top { padding: 8px 16px; }
+  .tagline { display: none; }
+  .stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  .panel { border-left: 0; border-top: 1px solid var(--line); padding: 10px 16px 12px; gap: 8px; overflow: visible; }
+  .p-head, .meta, .keys { display: none; }
+  .stepline { border-top: 0; padding-top: 0; }
+  .stepline .num { font-size: 24px; }
+  .instr { font-size: 14.5px; min-height: 0; max-width: none; }
+  .stage-title { left: 16px; top: 10px; }
+  .stage-title h1 { font-size: 18px; }
+  .legend { right: 12px; top: auto; bottom: 10px; font-size: 11px; }
+  .pill { left: 16px; bottom: 10px; }
+  .tbar { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; padding: 8px 16px; }
+  .steps { grid-column: 1 / -1; grid-row: 1; }
+  .sn { width: 26px; height: 30px; font-size: 14px; }
+  .btn small { display: none; }
+  .catalog-inner { padding: 14px 16px 32px; }
+  #grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card, .toggle input, .toggle input::after { transition: none; }
+  #next.ready svg { animation: none; }
+}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div class="seal" aria-hidden="true">折</div>
+    <div class="brand"><b>Ichimai</b><span lang="ja">一枚</span></div>
+    <div class="tagline">One sheet, folded step by step</div>
+  </header>
+
+  <section class="stage" aria-label="Folding instructions">
+    <div class="viewer">
+    <div class="canvas">
+      <svg id="stage-svg" viewBox="-150 -150 300 300" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="m-name">
+        <g class="paper" id="stage-paper"></g>
+        <g id="stage-guides"></g>
+      </svg>
+      <div class="stage-title"><h1 id="m-name">Dog Face</h1><span id="m-jp" lang="ja"></span></div>
+      <div class="legend" aria-hidden="true">
+        <div><svg viewBox="0 0 34 6"><line x1="0" y1="3" x2="34" y2="3" class="gline valley"/></svg>Valley fold</div>
+        <div><svg viewBox="0 0 34 6"><line x1="0" y1="3" x2="34" y2="3" class="gline mountain"/></svg>Mountain fold</div>
+      </div>
+      <div class="pill" id="pill" aria-live="polite"></div>
+    </div>
+    <nav class="transport" aria-label="Step controls">
+      <div class="anim" aria-hidden="true"><span id="anim-fill"></span></div>
+      <div class="tbar">
+        <button type="button" class="btn" id="prev" title="Previous step (←)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg><span class="lbl">Previous</span><small lang="ja">戻る</small></button>
+        <button type="button" class="btn" id="replay" title="Replay this step (R)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13 2.5v3h-3"/></svg><span>Replay step</span><small lang="ja">もう一度</small></button>
+        <div class="steps" id="dots" role="group" aria-label="Jump to step"></div>
+        <button type="button" class="btn primary" id="next" title="Next step (→)"><span id="next-lbl">Next step</span><small lang="ja">次へ</small><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l5 5-5 5"/></svg></button>
+      </div>
+    </nav>
+    </div>
+
+    <aside class="panel">
+      <div class="p-head">
+        <h2 id="p-name"></h2>
+        <p id="p-blurb"></p>
+      </div>
+      <div class="meta" id="p-meta"></div>
+      <div class="stepline" aria-live="polite"><span class="label">Step</span><span class="num" id="s-num">1</span><span class="of">of <span id="s-total">1</span></span></div>
+      <p class="instr" id="s-text"></p>
+      <div class="toggles">
+        <label class="toggle"><input type="checkbox" id="loop">Loop this step</label>
+        <label class="toggle"><input type="checkbox" id="slow">Slow motion</label>
+      </div>
+      <div class="keys"><kbd>←</kbd> <kbd>→</kbd> step · <kbd>R</kbd> replay · <kbd>L</kbd> loop · <kbd>/</kbd> search</div>
+    </aside>
+  </section>
+
+  <main class="catalog">
+    <div class="catalog-inner">
+      <div class="toolbar">
+        <label class="search">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+          <input id="q" type="search" placeholder="Search models: helmet, flower, kids, modular…" aria-label="Search models" autocomplete="off">
+        </label>
+        <div id="filters"></div>
+      </div>
+      <div class="results-head"><span id="count"></span><button type="button" class="linkbtn" id="clear" hidden>Clear filters</button></div>
+      <div id="grid"></div>
+      <div class="empty" id="empty" hidden>No models match these filters. <button type="button" class="linkbtn" id="empty-clear">Clear filters</button></div>
+    </div>
+  </main>
+</div>
+
+<script>
+/* Fold engine
+   Paper is a set of flat convex facets. Each facet keeps its polygon in paper
+   coordinates plus an affine matrix (paper -> view). A fold reflects the facets
+   on one side of a line; the in-between frames use a partial reflection
+   (perpendicular distance scaled by cos θ), which is a projected 3D hinge. */
+const Fold = (() => {
+  const EPS = 1e-6;
+  const BIG = 1e6;
+
+  // SVG-style matrix [a,b,c,d,e,f]: x' = a x + c y + e, y' = b x + d y + f
+  const I = [1, 0, 0, 1, 0, 0];
+  const mul = (A, B) => [
+    A[0] * B[0] + A[2] * B[1], A[1] * B[0] + A[3] * B[1],
+    A[0] * B[2] + A[2] * B[3], A[1] * B[2] + A[3] * B[3],
+    A[0] * B[4] + A[2] * B[5] + A[4], A[1] * B[4] + A[3] * B[5] + A[5],
+  ];
+  const ap = (M, p) => [M[0] * p[0] + M[2] * p[1] + M[4], M[1] * p[0] + M[3] * p[1] + M[5]];
+  const det = (M) => M[0] * M[3] - M[1] * M[2];
+  const rot = (deg, cx = 0, cy = 0) => {
+    const r = (deg * Math.PI) / 180, c = Math.cos(r), s = Math.sin(r);
+    return [c, s, -s, c, cx - c * cx + s * cy, cy - s * cx - c * cy];
+  };
+  const scaleX = (k, cx) => [k, 0, 0, 1, cx - k * cx, 0];
+  const mirrorX = [-1, 0, 0, 1, 0, 0];
+
+  // Hinge about line p->q at angle θ (θ = π is a full reflection)
+  function hinge(p, q, theta) {
+    let ux = q[0] - p[0], uy = q[1] - p[1];
+    const L = Math.hypot(ux, uy); ux /= L; uy /= L;
+    const nx = -uy, ny = ux;
+    let k = Math.cos(theta);
+    if (Math.abs(k) < 0.004) k = k < 0 ? -0.004 : 0.004; // avoid a singular matrix
+    const a = ux * ux + k * nx * nx, b = ux * uy + k * nx * ny, d = uy * uy + k * ny * ny;
+    return [a, b, b, d, p[0] - (a * p[0] + b * p[1]), p[1] - (b * p[0] + d * p[1])];
+  }
+  const reflect = (p, q) => hinge(p, q, Math.PI);
+  const cross = (p, q, x) => (q[0] - p[0]) * (x[1] - p[1]) - (q[1] - p[1]) * (x[0] - p[0]);
+
+  function area(poly) {
+    let s = 0;
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i], b = poly[(i + 1) % poly.length];
+      s += a[0] * b[1] - b[0] * a[1];
+    }
+    return s / 2;
+  }
+
+  // Keep the part of poly where vals * sign > 0
+  function clip(poly, vals, sign) {
+    const out = [];
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i], b = poly[(i + 1) % poly.length];
+      const va = vals[i] * sign, vb = vals[(i + 1) % poly.length] * sign;
+      if (va >= -EPS) out.push(a);
+      if ((va > EPS && vb < -EPS) || (va < -EPS && vb > EPS)) {
+        const t = va / (va - vb);
+        out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+      }
+    }
+    // drop near-duplicate points
+    return out.filter((p, i) => {
+      const n = out[(i + 1) % out.length];
+      return out.length < 2 || Math.hypot(p[0] - n[0], p[1] - n[1]) > 1e-7;
+    });
+  }
+
+  const SHAPES = {
+    square: { label: 'Square', w: 240, h: 240 },
+    a4: { label: 'A4 rectangle (1:√2)', w: 240 / Math.SQRT2, h: 240 },
+    '3x5': { label: '3:5 rectangle', w: 240, h: 144 },
+  };
+
+  let uid = 0;
+  function initialState(model) {
+    const s = SHAPES[model.shape];
+    const w = s.w / 2, h = s.h / 2;
+    let M = rot(model.orient || 0);
+    if (model.start === 'back') M = mul(M, mirrorX);
+    return {
+      facets: [{ id: ++uid, poly: [[-w, -h], [w, -h], [w, h], [-w, h]], M, z: 0, tags: [] }],
+      creases: [],
+    };
+  }
+
+  const clone = (f, extra) => ({ ...f, tags: f.tags.slice(), ...extra });
+
+  function matches(f, sel) {
+    if (!sel || sel === 'all') return true;
+    const any = sel.tags ? sel.tags.some((t) => f.tags.includes(t)) : true;
+    const none = sel.notTags ? !sel.notTags.some((t) => f.tags.includes(t)) : true;
+    return any && none;
+  }
+
+  const viewPoly = (f) => f.poly.map((v) => ap(f.M, v));
+  // optional box [x0, y0, x1, y1] that a facet's center must fall in
+  function inside(f, box) {
+    if (!box) return true;
+    const vp = viewPoly(f);
+    const c = vp.reduce((s, p) => [s[0] + p[0] / vp.length, s[1] + p[1] / vp.length], [0, 0]);
+    return c[0] >= box[0] && c[0] <= box[2] && c[1] >= box[1] && c[1] <= box[3];
+  }
+
+  function bbox(points, into) {
+    const b = into || [Infinity, Infinity, -Infinity, -Infinity];
+    for (const p of points) {
+      if (p[0] < b[0]) b[0] = p[0];
+      if (p[1] < b[1]) b[1] = p[1];
+      if (p[0] > b[2]) b[2] = p[0];
+      if (p[1] > b[3]) b[3] = p[1];
+    }
+    return b;
+  }
+  const stateBox = (st, into) => st.facets.reduce((b, f) => bbox(viewPoly(f), b), into);
+
+  function normalizeZ(facets) {
+    facets.slice().sort((a, b) => a.z - b.z).forEach((f, i) => (f.z = i));
+    return facets;
+  }
+
+  /* Apply the fold/crease ops of one step. Returns the after-state plus the
+     animation description (each piece keeps its start matrix and the hinges
+     that move it). */
+  function foldOps(state, ops) {
+    let work = state.facets.map((f) => clone(f, { M0: f.M, z0: f.z, moves: [] }));
+    const creases = state.creases.slice();
+    const allUnfold = ops.every((o) => o.unfold);
+
+    ops.forEach((op, oi) => {
+      const [p, q] = op.line;
+      const sgn = Math.sign(cross(p, q, op.move)) || 1;
+      const zs = work.map((f) => f.z);
+      const maxZ = Math.max(...zs), minZ = Math.min(...zs);
+      const next = [], moving = [];
+      for (const f of work) {
+        if (!matches(f, op.select) || !inside(f, op.within)) { next.push(f); continue; }
+        const vals = f.poly.map((v) => cross(p, q, ap(f.M, v)) * sgn);
+        const hi = Math.max(...vals), lo = Math.min(...vals);
+        if (hi <= 1e-4) { next.push(f); continue; }
+        if (lo >= -1e-4) { moving.push(f); continue; }
+        const A = clip(f.poly, vals, 1), B = clip(f.poly, vals, -1);
+        if (Math.abs(area(A)) < 0.05) { next.push(f); continue; }
+        if (Math.abs(area(B)) < 0.05) { moving.push(f); continue; }
+        next.push(clone(f, { id: ++uid, poly: B }));
+        const piece = clone(f, { id: ++uid, poly: A });
+        moving.push(piece);
+        // crease = the edge of the moving piece that lies on the line
+        const on = A.filter((v) => Math.abs(cross(p, q, ap(f.M, v))) < 1e-3 * Math.hypot(q[0] - p[0], q[1] - p[1]));
+        if (on.length >= 2) creases.push({ a: on[0], b: on[on.length - 1], dir: op.dir || 'valley' });
+      }
+      if (!moving.length) console.warn('fold op moved nothing', op);
+      moving.sort((a, b) => a.z - b.z);
+      const R = reflect(p, q);
+      const n = moving.length;
+      moving.forEach((f, i) => {
+        f.moves = f.moves.concat([{ p, q, oi }]);
+        f.dir = op.dir || 'valley';
+        f.keep = op.place === 'keep';
+        if (!op.unfold) {
+          f.M = mul(R, f.M);
+          if (!f.keep) f.z = f.dir === 'valley' ? maxZ + (n - i) : minZ - 1 - i;
+        }
+        if (op.tag) f.tags.push(op.tag);
+      });
+      if (op.tagStay) next.forEach((f) => { if (matches(f, op.select)) f.tags.push(op.tagStay); });
+            work = next.concat(moving);
+    });
+
+    const after = allUnfold
+      ? { facets: state.facets.map((f) => clone(f)), creases }
+      : { facets: normalizeZ(work.map((f) => ({ id: f.id, poly: f.poly, M: f.M, z: f.z, tags: f.tags }))), creases };
+    // final z for the animation pieces
+    const zAfter = new Map(after.facets.map((f) => [f.id, f.z]));
+    return { after, pieces: work, unfold: allUnfold, zAfter };
+  }
+
+  // Build a playable step: before/after states and a frame function
+  function compileStep(before, step) {
+    const ops = step.ops || [];
+    const kind = ops.length ? ops[0].type : 'none';
+    if (kind === 'fold' || kind === 'crease') {
+      const norm = ops.map((o) => ({ ...o, unfold: o.type === 'crease' }));
+      const r = foldOps(before, norm);
+      return { kind: r.unfold ? 'crease' : 'fold', before, after: r.after, pieces: r.pieces, ops: norm, zAfter: r.zAfter };
+    }
+    if (kind === 'flip' || kind === 'rotate') {
+      const b = stateBox(before);
+      const op = ops[0];
+      const cx = op.axis != null ? op.axis : (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+      const T = kind === 'flip' ? mul([1, 0, 0, 1, 2 * cx, 0], mirrorX) : rot(op.angle);
+      const after = {
+        facets: normalizeZ(before.facets.map((f) => clone(f, { M: mul(T, f.M), z: kind === 'flip' ? -f.z : f.z }))),
+        creases: before.creases,
+      };
+      return { kind, before, after, cx, cy: 0, angle: op.angle || 0 };
+    }
+    return { kind: step.note ? 'note' : 'none', before, after: before, note: step.note };
+  }
+
+  /* Frame at progress θ in [0, π] (crease steps go 0 → π → 0 via `back`).
+     Returns draw list sorted bottom to top: {poly, M, shade, front} */
+  function frame(cs, theta, back) {
+    if (cs.kind === 'fold' || cs.kind === 'crease') {
+      const late = back ? true : theta >= Math.PI / 2;
+      const list = cs.pieces.map((f) => {
+        let M = f.M0, moving = f.moves.length > 0;
+        for (const mv of f.moves) M = mul(hinge(mv.p, mv.q, theta), M);
+        let key;
+        if (!moving) key = f.z0;
+        else if (cs.kind === 'fold' && late) key = cs.zAfter.has(f.id) ? cs.zAfter.get(f.id) : f.z;
+        else if (f.keep) key = f.z0;
+        else if (!late) key = (f.dir === 'valley' ? BIG : -BIG) + f.z0;
+        else key = (f.dir === 'valley' ? BIG : -BIG) - f.z0;
+        return { id: f.id, poly: f.poly, M, key, shade: moving ? Math.abs(Math.sin(theta)) : 0 };
+      });
+      if (cs.kind === 'fold' && late) {
+        // after the half-way point, stay facets use their final order too
+        list.forEach((d) => { if (cs.zAfter.has(d.id)) d.key = cs.zAfter.get(d.id); });
+      }
+      return list.sort((a, b) => a.key - b.key);
+    }
+    if (cs.kind === 'flip') {
+      const S = scaleX(Math.abs(Math.cos(theta)) < 0.004 ? 0.004 : Math.cos(theta), cs.cx);
+      const late = theta >= Math.PI / 2;
+      return cs.before.facets
+        .map((f) => ({ id: f.id, poly: f.poly, M: mul(S, f.M), key: late ? -f.z : f.z, shade: Math.abs(Math.sin(theta)) * 0.6 }))
+        .sort((a, b) => a.key - b.key);
+    }
+    if (cs.kind === 'rotate') {
+      const R = rot((cs.angle * theta) / Math.PI);
+      return cs.before.facets
+        .map((f) => ({ id: f.id, poly: f.poly, M: mul(R, f.M), key: f.z, shade: 0 }))
+        .sort((a, b) => a.key - b.key);
+    }
+    return staticList(cs.after);
+  }
+
+  const staticList = (st) =>
+    st.facets.map((f) => ({ id: f.id, poly: f.poly, M: f.M, key: f.z, shade: 0 })).sort((a, b) => a.key - b.key);
+
+  function compileModel(model) {
+    let st = initialState(model);
+    // Step 1 shows the paper turning over so both faces are visible
+    const pre = compileStep(st, { ops: [{ type: 'flip' }] }).after;
+    const steps = [];
+    model.steps.forEach((step, i) => {
+      const cs = i === 0 ? compileStep(pre, { ops: [{ type: 'flip' }] }) : compileStep(st, step);
+      cs.step = step;
+      steps.push(cs);
+      st = cs.after;
+    });
+    // view box per step: sample the motion
+    steps.forEach((cs) => {
+      let b = [Infinity, Infinity, -Infinity, -Infinity];
+      for (let k = 0; k <= 8; k++) {
+        const th = (k / 8) * Math.PI;
+        for (const d of frame(cs, th)) bbox(d.poly.map((v) => ap(d.M, v)), b);
+      }
+      if (cs.kind === 'note') b = [-150, -150, 150, 150];
+      cs.box = b;
+    });
+    return { model, steps, final: st };
+  }
+
+  return { compileModel, frame, staticList, ap, det, mul, reflect, viewPoly, stateBox, bbox, cross, SHAPES };
+})();
+if (typeof module !== 'undefined') module.exports = Fold;
+
+/* Catalog. Coordinates are view units; a square sheet is 240 across.
+   D = half-diagonal of the square, used when the sheet sits as a diamond. */
+const MODELS = (() => {
+  const D = 120 * Math.SQRT2;
+  const fold = (line, move, opts = {}) => ({ type: 'fold', line, move, dir: 'valley', ...opts });
+  const mtn = (line, move, opts = {}) => fold(line, move, { ...opts, dir: 'mountain' });
+  const crease = (line, move, opts = {}) => ({ type: 'crease', line, move, dir: 'valley', ...opts });
+  const flip = { type: 'flip' };
+  const rotate = (angle) => ({ type: 'rotate', angle });
+
+  // bisector helpers for kite folds from a corner
+  const t22 = Math.tan(Math.PI / 8);
+
+  return [
+    {
+      id: 'dog-face', name: 'Dog Face', jp: 'いぬ', difficulty: 1, shape: 'square', category: 'animals',
+      sides: 'one', colors: ['#b7793f', '#f7f4ec'], orient: 45, start: 'back',
+      blurb: 'A floppy-eared puppy in five folds. A good first model for kids.',
+      keywords: 'puppy dog animal kids',
+      steps: [
+        { text: 'Start with a square, colored side down. Turn it so a corner points up.' },
+        { text: 'Fold the top corner down to meet the bottom corner.', ops: [fold([[-D, 0], [D, 0]], [0, -60], { tag: 'front', tagStay: 'back' })] },
+        { text: 'Fold the left and right corners down at an angle to make the ears.', ops: [
+          fold([[-60.7, 0], [-186, 86]], [-150, 5]),
+          fold([[60.7, 0], [186, 86]], [150, 5]),
+        ] },
+        { text: 'Fold the top layer of the bottom point up to form the nose.', ops: [fold([[-60, 122], [60, 122]], [0, 160], { select: { tags: ['front'] } })] },
+        { text: 'Fold the remaining point behind to square off the chin. Draw the eyes and nose.', ops: [mtn([[-60, 122], [60, 122]], [0, 160], { select: { tags: ['back'] } })],
+          marks: [{ x: -34, y: 48, r: 6 }, { x: 34, y: 48, r: 6 }, { x: 0, y: 84, r: 8 }] },
+      ],
+    },
+    {
+      id: 'cat-face', name: 'Cat Face', jp: 'ねこ', difficulty: 1, shape: 'square', category: 'animals',
+      sides: 'one', colors: ['#5f5a66', '#f7f4ec'], orient: 45, start: 'back',
+      blurb: 'Pointed ears and a flat crown. Pairs well with the dog face.',
+      keywords: 'kitten cat animal kids',
+      steps: [
+        { text: 'Start with a square, colored side down, a corner pointing up.' },
+        { text: 'Fold the bottom corner up to meet the top corner.', ops: [fold([[-D, 0], [D, 0]], [0, 60])] },
+        { text: 'Fold the left and right corners up so their points stand beside the top.', ops: [
+          fold([[-8, 0], [-120, -75]], [-150, -6], { tag: 'ear' }),
+          fold([[8, 0], [120, -75]], [150, -6], { tag: 'ear' }),
+        ] },
+        { text: 'Fold the top point behind, between the ears.', ops: [mtn([[-60, -96], [60, -96]], [0, -150], { select: { notTags: ['ear'] } })] },
+        { text: 'Draw the face.', marks: [{ x: -30, y: -48, r: 6 }, { x: 30, y: -48, r: 6 }, { x: 0, y: -24, r: 5 }] },
+      ],
+    },
+    {
+      id: 'tulip', name: 'Tulip', jp: 'チューリップ', difficulty: 1, shape: 'square', category: 'nature',
+      sides: 'one', colors: ['#c63b4c', '#f7f4ec'], orient: 45, start: 'back',
+      blurb: 'A three-fold flower head. Make several for a spring card.',
+      keywords: 'flower spring bloom card',
+      steps: [
+        { text: 'Start with a square, colored side down, a corner pointing up.' },
+        { text: 'Fold the bottom corner up to the top corner.', ops: [fold([[-D, 0], [D, 0]], [0, 60])] },
+        { text: 'Fold the left and right corners up so their points stick out past the sides.', ops: [
+          fold([[-19.8, 0], [-132.5, -65]], [-160, -4]),
+          fold([[19.8, 0], [132.5, -65]], [160, -4]),
+        ] },
+      ],
+    },
+    {
+      id: 'cup', name: 'Drinking Cup', jp: 'コップ', difficulty: 1, shape: 'square', category: 'object',
+      sides: 'two', colors: ['#3f8f9d', '#a9d3d6'], orient: 45, start: 'back',
+      blurb: 'A cup that really holds water for a few minutes. Two-sided paper keeps the band at the top the same family of color.',
+      keywords: 'cup water drink container classic',
+      steps: [
+        { text: 'Start with a square, a corner pointing up.' },
+        { text: 'Fold the bottom corner up to the top corner.', ops: [fold([[-D, 0], [D, 0]], [0, 60], { tag: 'front', tagStay: 'back' })] },
+        { text: 'Fold the right corner across so it touches the left edge. Its top edge should be level.', ops: [fold([[29.2, 0], [105.7, -184.8]], [150, -6])] },
+        { text: 'Fold the left corner across to touch the right edge.', ops: [fold([[-29.2, 0], [-105.7, -184.8]], [-150, -6])] },
+        { text: 'Fold the top flap down in front.', ops: [fold([[-80, -99.6], [80, -99.6]], [0, -150], { select: { tags: ['front'] } })] },
+        { text: 'Fold the back flap down behind. Open the cup by pressing the sides.', ops: [mtn([[-80, -99.6], [80, -99.6]], [0, -150], { select: { tags: ['back'] } })] },
+      ],
+    },
+    {
+      id: 'whale', name: 'Whale', jp: 'くじら', difficulty: 1, shape: 'square', category: 'animals',
+      sides: 'one', colors: ['#3e5b82', '#f7f4ec'], orient: 45, start: 'back',
+      blurb: 'Starts from the kite base, the most useful first base to learn.',
+      keywords: 'whale ocean sea animal kite base',
+      steps: [
+        { text: 'Start with a square, colored side down, a corner pointing up.' },
+        { text: 'Fold in half from side to side and unfold to make a center crease.', ops: [crease([[0, -D], [0, D]], [-60, 0])] },
+        { text: 'Fold the lower edges in to the center crease. This is the kite base.', ops: [
+          fold([[0, D], [-99.41, -70.29]], [-150, 0]),
+          fold([[0, D], [99.41, -70.29]], [150, 0]),
+        ] },
+        { text: 'Fold the top corner down along the line between the side corners.', ops: [fold([[-99.41, -70.29], [99.41, -70.29]], [0, -150])] },
+        { text: 'Fold in half by folding the left half behind.', ops: [mtn([[0, -D], [0, D]], [-40, 0])] },
+        { text: 'Rotate the model so the long point faces left.', ops: [rotate(90)] },
+        { text: 'Fold the tail up. Draw an eye.', ops: [fold([[-112, 0], [-88, 70]], [-150, 3])], marks: [{ x: 50, y: 22, r: 5 }] },
+      ],
+    },
+    {
+      id: 'crane', name: 'Crane', jp: 'つる', difficulty: 3, shape: 'square', category: 'animals',
+      sides: 'one', colors: ['#c4473a', '#f7f4ec'], orient: 45, start: 'front',
+      blurb: 'The traditional orizuru. It passes through the preliminary base and the bird base, the two foundations of classic origami.',
+      keywords: 'crane orizuru tsuru bird senbazuru traditional bird base preliminary base squash petal reverse fold',
+      steps: (() => {
+        const E = 49.71;                  // kite corners of the bird base sit at (±E, E)
+        const L = [-400, -400, 0, 400], R = [0, -400, 400, 400];
+        const squash = (flap, q, s, sgn) => [
+          fold([[0, -10], [0, D + 10]], [60 * sgn, 40], { select: { tags: [flap], notTags: ['f'] } }),
+          fold([[0, 0], [D * sgn, D]], [120 * sgn, 30], { select: { tags: [flap], notTags: ['b'] }, tag: q, tagStay: s }),
+          fold([[0, 0], [-D * sgn, D]], [-120 * sgn, 30], { select: { tags: [flap], notTags: ['f'] }, tag: q, tagStay: s }),
+        ];
+        const petal = (q, s) => [
+          fold([[0, D], [-E, E]], [-70, 90], { select: { tags: [q, s] }, within: L }),
+          fold([[0, D], [E, E]], [70, 90], { select: { tags: [q, s] }, within: R }),
+          fold([[-100, E], [100, E]], [0, 120], { select: { tags: [q] } }),
+        ];
+        const narrow = (s) => [
+          fold([[0, D], [-33.76, 0]], [-40, 110], { select: { tags: [s] }, within: L }),
+          fold([[0, D], [33.76, 0]], [40, 110], { select: { tags: [s] }, within: R }),
+        ];
+        const turn = { type: 'flip', axis: 0 };
+        return [
+          { text: 'Start with a square, colored side up, a corner pointing up.' },
+          { text: 'Fold the top corner down to the bottom corner.', ops: [fold([[-D, 0], [D, 0]], [0, -60], { tag: 'f', tagStay: 'b' })] },
+          { text: 'Fold the left corner over to the right corner.', ops: [fold([[0, -10], [0, D + 10]], [-60, 20], { tag: 'L', tagStay: 'R' })] },
+          { text: 'Squash fold: lift the top flap upright, open its pocket, and press it flat into a square.', ops: squash('L', 'q1', 's1', 1) },
+          { text: 'Turn the paper over.', ops: [turn] },
+          { text: 'Squash the other flap the same way. This square, open end down, is the preliminary base.', ops: squash('R', 'q2', 's2', -1) },
+          { text: 'Fold the lower edges of the top layer in to the center line, then unfold.', ops: [
+            crease([[0, D], [-E, E]], [-70, 90], { select: { tags: ['q2'] }, within: L }),
+            crease([[0, D], [E, E]], [70, 90], { select: { tags: ['q2'] }, within: R }),
+          ] },
+          { text: 'Fold the top triangle down along the line between those creases, then unfold.', ops: [crease([[-100, E], [100, E]], [0, 20], { select: { tags: ['q2'] } })] },
+          { text: 'Petal fold: lift the bottom corner of the top layer up past the top. The sides fold in along the creases.', ops: petal('q2', 's2') },
+          { text: 'Turn the paper over.', ops: [turn] },
+          { text: 'Repeat the creases and petal fold on this side. This long diamond is the bird base.', ops: petal('q1', 's1') },
+          { text: 'Fold the lower edges of the top layer in to the center line.', ops: narrow('s1') },
+          { text: 'Turn the paper over.', ops: [turn] },
+          { text: 'Fold the lower edges in to the center line on this side too.', ops: narrow('s2') },
+          { text: 'Inside reverse fold the left point up between the layers to form the neck.', ops: [
+            fold([[-90, 92.4], [30.6, 44.2]], [-5, 140], { select: { tags: ['s1', 's2'] }, within: L, place: 'keep', tag: 'neck' }),
+          ] },
+          { text: 'Inside reverse fold the right point up the same way to form the tail.', ops: [
+            fold([[90, 92.4], [-30.6, 44.2]], [5, 140], { select: { tags: ['s1', 's2'] }, within: R, place: 'keep', tag: 'tail' }),
+          ] },
+          { text: 'Inside reverse fold the tip of the neck down to form the head.', ops: [
+            fold([[-97.6, 10.2], [-22.4, -17]], [-78, -25], { select: { tags: ['neck'] }, place: 'keep', tag: 'head' }),
+          ] },
+          { text: 'Fold the front wing down along the line between the neck and tail.', ops: [fold([[-100, E], [100, E]], [0, 20], { select: { tags: ['q2'], notTags: ['neck', 'tail'] } })] },
+          { text: 'Fold the back wing down behind to match.', ops: [mtn([[-100, E], [100, E]], [0, 20], { select: { tags: ['q1'], notTags: ['neck', 'tail'] } })] },
+          { text: 'Hold the wings and pull them gently apart to shape the body. Your crane is finished.' },
+        ];
+      })(),
+    },
+    {
+      id: 'penguin', name: 'Penguin', jp: 'ペンギン', difficulty: 2, shape: 'square', category: 'animals',
+      sides: 'one', colors: ['#2c2c30', '#f7f4ec'], orient: 45, start: 'back',
+      blurb: 'One-sided paper does the work here: the white side becomes the belly.',
+      keywords: 'penguin bird winter animal color change',
+      steps: [
+        { text: 'Start with a square, white side up, a corner pointing up.' },
+        { text: 'Fold in half from side to side and unfold.', ops: [crease([[0, -D], [0, D]], [-60, 0])] },
+        { text: 'Fold the sides in from the top corner, leaving a white wedge open at the center for the belly.', ops: [
+          fold([[0, -D], [-124.2, 45.5]], [-150, 0]),
+          fold([[0, -D], [124.2, 45.5]], [150, 0]),
+        ] },
+        { text: 'Fold the bottom point behind so the penguin can stand.', ops: [mtn([[-60, 112], [60, 112]], [0, 150])] },
+        { text: 'Fold the top point down to make the head.', ops: [fold([[-80, -92], [80, -92]], [0, -150], { tag: 'head' })] },
+        { text: 'Fold the tip of the head back up to form the beak. Draw the eyes.', ops: [fold([[-40, -36], [40, -36]], [0, -20], { select: { tags: ['head'] } })],
+          marks: [{ x: -16, y: -70, r: 4 }, { x: 16, y: -70, r: 4 }] },
+      ],
+    },
+    {
+      id: 'dart', name: 'Dart Plane', jp: 'かみひこうき', difficulty: 1, shape: 'a4', category: 'object',
+      sides: 'one', colors: ['#5f8fbf', '#f7f4ec'], orient: 0, start: 'back',
+      blurb: 'The classic schoolroom plane from a sheet of A4 or letter paper.',
+      keywords: 'airplane paper plane flying glider a4 letter',
+      steps: [
+        { text: 'Start with an A4 sheet, colored side down, short edge at the top.' },
+        { text: 'Fold in half lengthwise and unfold.', ops: [crease([[0, -120], [0, 120]], [-40, 0])] },
+        { text: 'Fold the top corners in to the center crease.', ops: [
+          fold([[0, -120], [-84.85, -35.15]], [-80, -115]),
+          fold([[0, -120], [84.85, -35.15]], [80, -115]),
+        ] },
+        { text: 'Fold the new slanted edges in to the center crease again.', ops: [
+          fold([[0, -120], [-84.85, 84.8]], [-80, 60]),
+          fold([[0, -120], [84.85, 84.8]], [80, 60]),
+        ] },
+        { text: 'Fold in half by folding the left half behind.', ops: [mtn([[0, -120], [0, 120]], [-30, 40], { tag: 'left', tagStay: 'right' })] },
+        { text: 'Rotate so the nose points left.', ops: [rotate(-90)] },
+        { text: 'Fold the front wing down so its edge lines up with the bottom of the plane.', ops: [fold([[-130, -42.4], [130, -42.4]], [100, -70], { select: { tags: ['right'] } })] },
+        { text: 'Fold the back wing down behind to match. Open the wings level and launch.', ops: [mtn([[-130, -42.4], [130, -42.4]], [100, -70], { select: { tags: ['left'] } })] },
+      ],
+    },
+    {
+      id: 'envelope', name: 'Letter Envelope', jp: 'ふうとう', difficulty: 1, shape: '3x5', category: 'object',
+      sides: 'one', colors: ['#8c76ad', '#f7f4ec'], orient: 0, start: 'back',
+      blurb: 'A pocket with a pointed flap, sized for a folded note or a gift card.',
+      keywords: 'envelope letter note card pocket gift',
+      steps: [
+        { text: 'Start with a 3:5 sheet, colored side down, long edge at the bottom.' },
+        { text: 'Fold the bottom edge up to make a pocket, a little past halfway.', ops: [fold([[-120, 21], [120, 21]], [0, 60], { tag: 'pocket' })] },
+        { text: 'Fold the two top corners down at 45°, stopping just above the pocket.', ops: [
+          fold([[-80, -72], [-120, -32]], [-115, -68]),
+          fold([[80, -72], [120, -32]], [115, -68]),
+        ] },
+        { text: 'Fold the top flap down over the pocket to close the envelope.', ops: [fold([[-120, -40], [120, -40]], [0, -60])] },
+      ],
+    },
+    {
+      id: 'fortune-teller', name: 'Fortune Teller', jp: 'パクパク', difficulty: 2, shape: 'square', category: 'object',
+      sides: 'one', colors: ['#dba22c', '#f7f4ec'], orient: 0, start: 'back',
+      blurb: 'Also called a cootie catcher. Two rounds of the blintz fold, then shape with your fingers.',
+      keywords: 'cootie catcher salt cellar game blintz kids',
+      steps: [
+        { text: 'Start with a square, colored side down.' },
+        { text: 'Fold in half along one diagonal and unfold.', ops: [crease([[-120, -120], [120, 120]], [-60, 60])] },
+        { text: 'Fold along the other diagonal and unfold.', ops: [crease([[120, -120], [-120, 120]], [60, 60])] },
+        { text: 'Fold all four corners in to the center.', ops: [
+          fold([[-120, 0], [0, -120]], [-110, -110]),
+          fold([[0, -120], [120, 0]], [110, -110]),
+          fold([[120, 0], [0, 120]], [110, 110]),
+          fold([[0, 120], [-120, 0]], [-110, 110]),
+        ] },
+        { text: 'Turn the paper over.', ops: [flip] },
+        { text: 'Fold the four new corners in to the center again.', ops: [
+          fold([[-60, -60], [60, -60]], [0, -110]),
+          fold([[60, -60], [60, 60]], [110, 0]),
+          fold([[60, 60], [-60, 60]], [0, 110]),
+          fold([[-60, 60], [-60, -60]], [-110, 0]),
+        ] },
+        { text: 'Fold in half top to bottom and unfold.', ops: [crease([[-60, 0], [60, 0]], [0, -40])] },
+        { text: 'Fold in half side to side and unfold.', ops: [crease([[0, -60], [0, 60]], [-40, 0])] },
+        { text: 'Turn over. Slide a thumb and finger into each of the four pockets and push the corners together.', ops: [flip] },
+      ],
+    },
+    {
+      id: 'kabuto', name: 'Samurai Helmet', jp: 'かぶと', difficulty: 2, shape: 'square', category: 'object',
+      sides: 'one', colors: ['#9d3b3e', '#f7f4ec'], orient: 45, start: 'back',
+      blurb: 'The kabuto folded for Children’s Day. Fold it from newspaper and it fits a child’s head.',
+      keywords: 'kabuto samurai helmet hat childrens day japan',
+      steps: [
+        { text: 'Start with a square, colored side down, a corner pointing up.' },
+        { text: 'Fold the top corner down to the bottom corner.', ops: [fold([[-D, 0], [D, 0]], [0, -60], { tag: 'front', tagStay: 'back' })] },
+        { text: 'Fold the left and right corners down to the bottom point.', ops: [
+          fold([[0, 0], [-100, 100]], [-150, 10], { tag: 'side' }),
+          fold([[0, 0], [100, 100]], [150, 10], { tag: 'side' }),
+        ] },
+        { text: 'Fold both bottom points of these flaps up to the top point.', ops: [fold([[-90, D / 2], [90, D / 2]], [0, 150], { select: { tags: ['side'] }, tag: 'horn' })] },
+        { text: 'Fold the two top points out and down to make the horns.', ops: [
+          fold([[-48.75, 48.75], [-55.97, 84.85]], [-10, 60], { select: { tags: ['horn'] }, within: [-200, -200, 0, 200] }),
+          fold([[48.75, 48.75], [55.97, 84.85]], [10, 60], { select: { tags: ['horn'] }, within: [0, -200, 200, 200] }),
+        ] },
+        { text: 'Fold the front layer of the bottom point up to the base of the horns.', ops: [fold([[-50, 127.3], [50, 127.3]], [0, 160], { select: { tags: ['front'] } })] },
+        { text: 'Fold that layer up again along the base of the horns to form the brim.', ops: [fold([[-90, D / 2], [90, D / 2]], [0, 110], { select: { tags: ['front'] } })] },
+        { text: 'Fold the back point up inside the helmet. Open the bottom to wear it.', ops: [mtn([[-90, D / 2], [90, D / 2]], [0, 140], { select: { tags: ['back'] } })] },
+      ],
+    },
+    {
+      id: 'heart', name: 'Simple Heart', jp: 'ハート', difficulty: 2, shape: 'square', category: 'object',
+      sides: 'two', colors: ['#c94d68', '#f2bfc9'], orient: 45, start: 'front',
+      blurb: 'Both faces of the paper show in the finished heart, so use paper colored on both sides.',
+      keywords: 'heart love valentine card gift',
+      steps: [
+        { text: 'Start with a square, a corner pointing up. Both sides of this paper are colored.' },
+        { text: 'Fold in half from side to side and unfold.', ops: [crease([[0, -D], [0, D]], [-60, 0])] },
+        { text: 'Fold the top corner down to the center of the paper.', ops: [fold([[-D, -D / 2], [D, -D / 2]], [0, -150])] },
+        { text: 'Fold the bottom corner up to the top edge.', ops: [fold([[-D, D / 4], [D, D / 4]], [0, 150])] },
+        { text: 'Fold the bottom edges up along the center crease.', ops: [
+          fold([[0, D / 4], [-120, D / 4 - 120]], [-120, 20]),
+          fold([[0, D / 4], [120, D / 4 - 120]], [120, 20]),
+        ] },
+        { text: 'Turn the paper over.', ops: [flip] },
+        { text: 'Fold the outer corners behind to round the sides of the heart.', ops: [
+          mtn([[-88.4, -100], [-88.4, -30]], [-100, -63.6]),
+          mtn([[88.4, -100], [88.4, -30]], [100, -63.6]),
+        ] },
+        { text: 'Fold the top points behind to round the top of each lobe.', ops: [mtn([[-120, -111.7], [120, -111.7]], [-42.4, -124])] },
+      ],
+    },
+    {
+      id: 'sonobe-cube', name: 'Sonobe Cube', jp: 'そのべユニット', difficulty: 3, shape: 'square', category: 'multi', sheets: 6,
+      sides: 'one', colors: ['#4f8f68', '#f7f4ec'], orient: 0, start: 'back',
+      blurb: 'Six identical units lock together into a cube with no glue. The same unit builds 12- and 30-piece kusudama.',
+      keywords: 'sonobe modular unit cube kusudama assembly',
+      steps: [
+        { text: 'You need 6 squares, ideally 2 each of 3 colors. Start with one, colored side down.' },
+        { text: 'Fold in half top to bottom and unfold.', ops: [crease([[-120, 0], [120, 0]], [0, -60])] },
+        { text: 'Fold the top and bottom edges in to the center crease.', ops: [
+          fold([[-120, -60], [120, -60]], [0, -100]),
+          fold([[-120, 60], [120, 60]], [0, 100]),
+        ] },
+        { text: 'Fold the bottom-left corner up to the top edge and the top-right corner down to the bottom edge. Tuck each point under the cupboard flap. You now have a parallelogram.', ops: [
+          fold([[-120, -60], [0, 60]], [-110, 50]),
+          fold([[120, 60], [0, -60]], [110, -50]),
+        ] },
+        { text: 'Turn the unit over.', ops: [flip] },
+        { text: 'Fold the left point up to the top edge and the right point down to the bottom edge to make a square, then unfold. These creases form the tabs.', ops: [
+          crease([[0, -60], [60, 0]], [100, -55]),
+          crease([[0, 60], [-60, 0]], [-100, 55]),
+        ] },
+        { text: 'Fold the other 5 units the same way. Slide each tab into a pocket of the neighboring unit until all six form a cube.', note: 'cube' },
+      ],
+    },
+  ];
+})();
+if (typeof module !== 'undefined') module.exports = MODELS;
+
+/* UI: stage player + catalog */
+(() => {
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const LEVELS = { 1: ['Beginner', '初級'], 2: ['Intermediate', '中級'], 3: ['Advanced', '上級'] };
+  const CATS = { animals: ['Animals', '動物'], nature: ['Nature', '自然'], object: ['Objects', '物'], multi: ['Multi-component', '組'] };
+  const SIDES = { one: ['One-sided', 'color + white'], two: ['Two-sided', 'both faces colored'] };
+  const SHAPES_SHORT = { square: 'Square', a4: 'A4', '3x5': '3:5' };
+
+  const compiled = new Map(MODELS.map((m) => [m.id, Fold.compileModel(m)]));
+
+  /* ---------- drawing ---------- */
+  function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  function shadeHex(h, k) { const [r, g, b] = hexToRgb(h); const f = 1 - k; return `rgb(${(r * f) | 0},${(g * f) | 0},${(b * f) | 0})`; }
+  const pathD = (poly) => 'M' + poly.map((p) => p[0].toFixed(2) + ' ' + p[1].toFixed(2)).join('L') + 'Z';
+  const mStr = (M) => `matrix(${M.map((n) => +n.toFixed(5)).join(' ')})`;
+
+  function polyBox(poly) { return Fold.bbox(poly); }
+  function boxesOverlap(a, b) { return a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3]; }
+
+  function drawPaper(list, model, creases, pfx) {
+    let s = '';
+    list.forEach((d, i) => {
+      const front = Fold.det(d.M) > 0;
+      const base = front ? model.colors[0] : model.colors[1];
+      const fill = d.shade ? shadeHex(base, 0.22 * d.shade) : base;
+      const pb = polyBox(d.poly);
+      const cs = creases.filter((c) => boxesOverlap(pb, Fold.bbox([c.a, c.b])));
+      const id = `${pfx}c${i}`;
+      s += `<g transform="${mStr(d.M)}">`;
+      s += `<path d="${pathD(d.poly)}" fill="${fill}" class="facet"/>`;
+      if (cs.length) {
+        s += `<clipPath id="${id}"><path d="${pathD(d.poly)}"/></clipPath><g clip-path="url(#${id})">`;
+        for (const c of cs) s += `<line x1="${c.a[0].toFixed(2)}" y1="${c.a[1].toFixed(2)}" x2="${c.b[0].toFixed(2)}" y2="${c.b[1].toFixed(2)}" class="crease"/>`;
+        s += '</g>';
+      }
+      s += `<path d="${pathD(d.poly)}" fill="none" class="edge"/></g>`;
+    });
+    return s;
+  }
+
+  function drawMarks(marks, opacity = 1) {
+    if (!marks) return '';
+    return marks.map((k) => `<circle cx="${k.x}" cy="${k.y}" r="${k.r}" fill="#1b1a18" opacity="${opacity}"/>`).join('');
+  }
+
+  // Assembled Sonobe cube, isometric
+  function drawCube(t = 1) {
+    const s = 92, c30 = Math.cos(Math.PI / 6) * s, h = s / 2;
+    const top = [[0, -s], [c30, -h], [0, 0], [-c30, -h]];
+    const left = [[-c30, -h], [0, 0], [0, s], [-c30, h]];
+    const right = [[0, 0], [c30, -h], [c30, h], [0, s]];
+    const pal = ['#4f8f68', '#d9a441', '#3e5b82'];
+    const tri = (pts, fill) => `<path d="${pathD(pts)}" fill="${fill}" class="facet"/>`;
+    const face = (q, a, b, dark) =>
+      tri([q[0], q[1], q[2]], shadeHex(a, dark)) + tri([q[0], q[2], q[3]], shadeHex(b, dark)) +
+      `<path d="${pathD(q)}" fill="none" class="edge"/><line x1="${q[0][0]}" y1="${q[0][1]}" x2="${q[2][0]}" y2="${q[2][1]}" class="edge"/>`;
+    const sc = 0.86 + 0.14 * t;
+    return `<g transform="scale(${sc})" opacity="${t}">` + face(top, pal[0], pal[1], 0) + face(left, pal[1], pal[2], 0.12) + face(right, pal[2], pal[0], 0.24) + '</g>';
+  }
+
+  function svgFor(list, model, creases, box, pfx, marks) {
+    const pad = Math.max(box[2] - box[0], box[3] - box[1]) * 0.1;
+    return `<svg viewBox="${box[0] - pad} ${box[1] - pad} ${box[2] - box[0] + 2 * pad} ${box[3] - box[1] + 2 * pad}" aria-hidden="true"><g class="paper">${drawPaper(list, model, creases, pfx)}${drawMarks(marks)}</g></svg>`;
+  }
+
+  function thumb(c, i) {
+    const last = c.steps[c.steps.length - 1];
+    if (last.kind === 'note') return `<svg viewBox="-120 -120 240 240" aria-hidden="true"><g class="paper">${drawCube(1)}</g></svg>`;
+    const marks = c.steps.map((s) => s.step.marks).filter(Boolean).pop();
+    return svgFor(Fold.staticList(c.final), c.model, c.final.creases, Fold.stateBox(c.final), 't' + i, marks);
+  }
+
+  /* ---------- guides (fold line + arrow) ---------- */
+  function clipLine(p, q, b) {
+    // extend line p-q to the box b
+    const dx = q[0] - p[0], dy = q[1] - p[1];
+    let t0 = -1e9, t1 = 1e9;
+    const chk = (num, den) => {
+      if (Math.abs(den) < 1e-9) return num >= 0;
+      const t = num / den;
+      if (den > 0) t1 = Math.min(t1, t); else t0 = Math.max(t0, t);
+      return true;
+    };
+    if (!chk(b[2] - p[0], dx) || !chk(p[0] - b[0], -dx) || !chk(b[3] - p[1], dy) || !chk(p[1] - b[1], -dy) || t0 > t1) return null;
+    return [[p[0] + dx * t0, p[1] + dy * t0], [p[0] + dx * t1, p[1] + dy * t1]];
+  }
+
+  function arrowPath(from, to, bend, size, open) {
+    const mx = (from[0] + to[0]) / 2, my = (from[1] + to[1]) / 2;
+    const c = [mx + bend[0], my + bend[1]];
+    const ang = Math.atan2(to[1] - c[1], to[0] - c[0]);
+    const head = (pt, a) => {
+      const l = [pt[0] - size * Math.cos(a - 0.42), pt[1] - size * Math.sin(a - 0.42)];
+      const r = [pt[0] - size * Math.cos(a + 0.42), pt[1] - size * Math.sin(a + 0.42)];
+      return `<path d="M${l[0]} ${l[1]}L${pt[0]} ${pt[1]}L${r[0]} ${r[1]}${open ? '' : 'Z'}" class="${open ? 'ahead open' : 'ahead'}"/>`;
+    };
+    return { body: `M${from[0]} ${from[1]}Q${c[0]} ${c[1]} ${to[0]} ${to[1]}`, head: head(to, ang), c, headAt: head };
+  }
+
+  function guidesFor(cs) {
+    const b = Fold.stateBox(cs.before);
+    const size = Math.max(b[2] - b[0], b[3] - b[1]);
+    const out = [];
+    if (cs.kind === 'fold' || cs.kind === 'crease') {
+      const eb = [b[0] - size * 0.06, b[1] - size * 0.06, b[2] + size * 0.06, b[3] + size * 0.06];
+      cs.ops.forEach((op, oi) => {
+        const seg = clipLine(op.line[0], op.line[1], eb);
+        const moved = cs.pieces.filter((f) => f.moves.length && f.moves[0].oi === oi);
+        let ax = 0, ay = 0, aw = 0;
+        for (const f of moved) {
+          const vp = f.poly.map((v) => Fold.ap(f.M0, v));
+          const a = Math.abs(vp.reduce((s, p, i) => { const n = vp[(i + 1) % vp.length]; return s + p[0] * n[1] - n[0] * p[1]; }, 0)) / 2;
+          const c = vp.reduce((s, p) => [s[0] + p[0] / vp.length, s[1] + p[1] / vp.length], [0, 0]);
+          ax += c[0] * a; ay += c[1] * a; aw += a;
+        }
+        let arrow = null;
+        if (aw > 0) {
+          const from = [ax / aw, ay / aw];
+          const to = Fold.ap(Fold.reflect(op.line[0], op.line[1]), from);
+          const dist = Math.hypot(to[0] - from[0], to[1] - from[1]);
+          if (dist > size * 0.04) {
+            let ux = op.line[1][0] - op.line[0][0], uy = op.line[1][1] - op.line[0][1];
+            const L = Math.hypot(ux, uy); ux /= L; uy /= L;
+            // bend toward the outside of the paper
+            const mid = [(from[0] + to[0]) / 2, (from[1] + to[1]) / 2];
+            const cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+            const sgn = (mid[0] - cx) * ux + (mid[1] - cy) * uy >= 0 ? 1 : -1;
+            const k = Math.min(dist * 0.32, size * 0.22);
+            arrow = arrowPath(from, to, [ux * k * sgn, uy * k * sgn], size * 0.045, op.dir === 'mountain');
+            arrow.from = from;
+          }
+        }
+        out.push({ seg, dir: op.dir, arrow, unfold: op.unfold });
+      });
+    } else if (cs.kind === 'flip' || cs.kind === 'rotate') {
+      const cx = (b[0] + b[2]) / 2, w = b[2] - b[0];
+      const y = b[3] + size * 0.1;
+      const from = [cx - Math.max(w, size * 0.5) * 0.32, y], to = [cx + Math.max(w, size * 0.5) * 0.32, y];
+      const arrow = arrowPath(from, to, [0, size * 0.14], size * 0.045, false);
+      out.push({ seg: null, arrow, flip: true });
+    }
+    return out;
+  }
+
+  function drawGuides(guides, op) {
+    if (!guides.length || op <= 0) return '';
+    let s = `<g opacity="${op.toFixed(3)}">`;
+    for (const g of guides) {
+      if (g.seg) s += `<line x1="${g.seg[0][0]}" y1="${g.seg[0][1]}" x2="${g.seg[1][0]}" y2="${g.seg[1][1]}" class="gline ${g.dir}"/>`;
+      if (g.arrow) {
+        s += `<path d="${g.arrow.body}" class="abody"/>` + g.arrow.head;
+        if (g.unfold) {
+          const a = Math.atan2(g.arrow.from[1] - g.arrow.c[1], g.arrow.from[0] - g.arrow.c[0]);
+          s += g.arrow.headAt(g.arrow.from, a);
+        }
+      }
+    }
+    return s + '</g>';
+  }
+
+  /* ---------- player ---------- */
+  const stageSvg = $('#stage-svg');
+  const player = { c: null, i: 0, t0: 0, raf: 0, loop: false, slow: false, box: null, fromBox: null, guides: [], done: false, holdUntil: 0 };
+
+  const ease = (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+
+  function timing(cs) {
+    switch (cs.kind) {
+      case 'fold': return { pre: 550, move: 1500, hold: 0, back: 0, post: 450 };
+      case 'crease': return { pre: 550, move: 1050, hold: 200, back: 1000, post: 300 };
+      case 'flip': return { pre: 400, move: 1350, hold: 0, back: 0, post: 300 };
+      case 'rotate': return { pre: 300, move: 1000, hold: 0, back: 0, post: 250 };
+      default: return { pre: 0, move: 800, hold: 0, back: 0, post: 200 };
+    }
+  }
+
+  function padBox(b, cs) {
+    const w = b[2] - b[0], h = b[3] - b[1], s = Math.max(w, h, 60);
+    const extra = cs.kind === 'flip' || cs.kind === 'rotate' ? 0.28 : 0.16;
+    return [b[0] - s * 0.16, b[1] - s * 0.16, b[2] + s * 0.16, b[3] + s * extra];
+  }
+
+  function pillText(cs, i) {
+    if (i === 0) return cs.step && player.c.model.sides === 'two' ? 'Both faces colored' : 'One face colored, one white';
+    const op = cs.ops && cs.ops[0];
+    if (cs.kind === 'fold') return op.dir === 'mountain' ? 'Mountain fold' : 'Valley fold';
+    if (cs.kind === 'crease') return 'Fold and unfold';
+    if (cs.kind === 'flip') return 'Turn over';
+    if (cs.kind === 'rotate') return 'Rotate';
+    if (cs.kind === 'note') return 'Assemble';
+    return '';
+  }
+
+  function render(now) {
+    const c = player.c, cs = c.steps[player.i], T = timing(cs);
+    const sp = player.slow ? 1.8 : 1;
+    let t = (now - player.t0) / sp;
+    if (reduced) t = 1e9;
+    const total = T.pre + T.move + T.hold + T.back + T.post;
+    let theta, gOp, markOp = 0;
+    if (t < T.pre) { theta = 0; gOp = t / T.pre; }
+    else if (t < T.pre + T.move) { theta = Math.PI * ease((t - T.pre) / T.move); gOp = 1; }
+    else if (t < T.pre + T.move + T.hold) { theta = Math.PI; gOp = 1; }
+    else if (t < T.pre + T.move + T.hold + T.back) { theta = Math.PI * (1 - ease((t - T.pre - T.move - T.hold) / T.back)); gOp = 1; }
+    else { theta = cs.kind === 'crease' ? 0 : Math.PI; gOp = 1 - clamp01((t - (total - T.post)) / T.post); markOp = clamp01((t - (total - T.post)) / T.post); }
+
+    // camera
+    const k = reduced ? 1 : ease(clamp01((now - player.t0) / 500));
+    const vb = player.box.map((v, j) => player.fromBox[j] + (v - player.fromBox[j]) * k);
+    player.view = vb;
+    stageSvg.setAttribute('viewBox', [vb[0], vb[1], vb[2] - vb[0], vb[3] - vb[1]].map((n) => n.toFixed(2)).join(' '));
+
+    let body;
+    if (cs.kind === 'note') {
+      body = drawCube(ease(clamp01(t / T.move)));
+    } else {
+      const ended = t >= total;
+      const list = ended ? Fold.staticList(cs.after) : Fold.frame(cs, theta);
+      const creases = ended || (cs.kind !== 'crease' && theta >= Math.PI) ? cs.after.creases : cs.before.creases;
+      body = drawPaper(list, c.model, creases, 's') + drawMarks(cs.step.marks, ended ? 1 : markOp);
+    }
+    $('#stage-paper').innerHTML = body;
+    $('#stage-guides').innerHTML = reduced ? drawGuides(player.guides, 0.85) : drawGuides(player.guides, gOp * 0.95);
+
+    $('#anim-fill').style.transform = `scaleX(${clamp01(t / total).toFixed(4)})`;
+    if (t < total) { player.raf = requestAnimationFrame(render); return; }
+    player.done = true;
+    if (!player.advanced && player.i < player.c.steps.length - 1) $('#next').classList.add('ready');
+    if (player.loop && !reduced) {
+      if (!player.holdUntil) player.holdUntil = now + 900;
+      if (now >= player.holdUntil) { playStep(player.i); return; }
+      player.raf = requestAnimationFrame(render);
+    }
+  }
+
+  function playStep(i) {
+    const c = player.c;
+    cancelAnimationFrame(player.raf);
+    player.i = Math.max(0, Math.min(c.steps.length - 1, i));
+    const cs = c.steps[player.i];
+    player.fromBox = player.view || padBox(cs.box, cs);
+    player.box = padBox(cs.box, cs);
+    if (cs.kind === 'note') player.box = [-150, -150, 150, 150];
+    player.guides = cs.kind === 'note' ? [] : guidesFor(cs);
+    player.done = false;
+    player.holdUntil = 0;
+    player.t0 = performance.now();
+    $('#next').classList.remove('ready');
+    updatePanel();
+    player.raf = requestAnimationFrame(render);
+  }
+
+  function loadModel(id, step = 0) {
+    const c = compiled.get(id) || compiled.values().next().value;
+    player.c = c;
+    player.view = null;
+    const m = c.model;
+    $('#m-name').textContent = m.name;
+    $('#m-jp').textContent = m.jp;
+    $('#p-name').textContent = m.name;
+    $('#p-blurb').textContent = m.blurb;
+    const lv = LEVELS[m.difficulty];
+    $('#p-meta').innerHTML = [
+      `<span class="tag"><span class="lvl" data-l="${m.difficulty}" aria-hidden="true"><i></i><i></i><i></i></span>${lv[0]}</span>`,
+      `<span class="tag">${Fold.SHAPES[m.shape].label}</span>`,
+      `<span class="tag"><span class="sw" style="background:${m.colors[0]}"></span><span class="sw" style="background:${m.colors[1]}"></span>${SIDES[m.sides][0]}</span>`,
+      m.sheets ? `<span class="tag">${m.sheets} sheets</span>` : '',
+    ].join('');
+    player.page = 0;
+    $$('.card').forEach((el) => el.setAttribute('aria-current', el.dataset.id === m.id ? 'true' : 'false'));
+    try { if (location.hash.slice(1) !== m.id) history.replaceState(null, '', '#' + m.id); } catch (e) { /* hash is a convenience */ }
+    playStep(step);
+  }
+
+  function updatePanel() {
+    const c = player.c, n = c.steps.length, cs = c.steps[player.i];
+    $('#s-num').textContent = player.i + 1;
+    $('#s-total').textContent = n;
+    $('#s-text').textContent = cs.step.text;
+    $('#pill').textContent = pillText(cs, player.i);
+    $('#prev').disabled = player.i === 0;
+    $('#next-lbl').textContent = player.i === n - 1 ? 'Start over' : 'Next step';
+    player.page = Math.floor(player.i / pageSize());
+    renderSteps();
+  }
+
+  // Step numbers are shown a page at a time so long models stay on one line
+  const narrow = matchMedia('(max-width: 820px)');
+  const pageSize = () => (narrow.matches ? 7 : 10);
+  function renderSteps() {
+    const n = player.c.steps.length, size = pageSize();
+    const pages = Math.ceil(n / size);
+    player.page = Math.max(0, Math.min(pages - 1, player.page));
+    const from = player.page * size, to = Math.min(n, from + size);
+    let s = '';
+    if (pages > 1) s += `<button type="button" class="pg" data-pg="-1" aria-label="Show steps ${Math.max(1, from - size + 1)}–${from}"${player.page === 0 ? ' disabled' : ''}>‹</button><span class="pg-gap"></span>`;
+    for (let k = from; k < to; k++) {
+      s += `<button type="button" class="sn${k < player.i ? ' past' : ''}" data-k="${k}" aria-label="Go to step ${k + 1}" aria-current="${k === player.i ? 'step' : 'false'}">${k + 1}</button>`;
+    }
+    if (pages > 1) s += `<span class="pg-gap"></span><button type="button" class="pg" data-pg="1" aria-label="Show steps ${to + 1}–${Math.min(n, to + size)}"${player.page === pages - 1 ? ' disabled' : ''}>›</button>`;
+    $('#dots').innerHTML = s;
+  }
+  narrow.addEventListener('change', () => { if (player.c) { player.page = Math.floor(player.i / pageSize()); renderSteps(); } });
+
+  /* ---------- catalog ---------- */
+  const filters = { difficulty: new Set(), shape: new Set(), sides: new Set(), category: new Set() };
+  const groups = [
+    ['difficulty', 'Difficulty', Object.entries(LEVELS).map(([k, v]) => [k, v[0], v[1]])],
+    ['shape', 'Paper shape', Object.keys(Fold.SHAPES).map((k) => [k, Fold.SHAPES[k].label, ''])],
+    ['sides', 'Paper color', Object.entries(SIDES).map(([k, v]) => [k, v[0], v[1]])],
+    ['category', 'Category', Object.entries(CATS).map(([k, v]) => [k, v[0], v[1]])],
+  ];
+
+  function buildFilters() {
+    $('#filters').innerHTML = groups.map(([key, label, opts]) => `
+      <div class="fgroup" role="group" aria-label="${label}">
+        <span class="flabel">${label}</span>
+        <div class="chips">${opts.map(([v, l, sub]) => {
+          const count = MODELS.filter((m) => String(m[key]) === v).length;
+          return `<button type="button" class="chip" data-key="${key}" data-v="${v}" aria-pressed="false"${count ? '' : ' disabled'}>${l}${sub ? `<small>${sub}</small>` : ''}<span class="cnt">${count}</span></button>`;
+        }).join('')}</div>
+      </div>`).join('');
+  }
+
+  function matchesModel(m, q) {
+    for (const [key] of groups) if (filters[key].size && !filters[key].has(String(m[key]))) return false;
+    if (!q) return true;
+    const hay = [m.name, m.jp, m.blurb, m.keywords, CATS[m.category][0], LEVELS[m.difficulty][0], Fold.SHAPES[m.shape].label].join(' ').toLowerCase();
+    return q.split(/\s+/).every((w) => hay.includes(w));
+  }
+
+  function buildCards() {
+    $('#grid').innerHTML = MODELS.map((m, i) => {
+      const c = compiled.get(m.id);
+      return `<button type="button" class="card" data-id="${m.id}" aria-current="false">
+        <span class="thumb">${thumb(c, i)}</span>
+        <span class="card-body">
+          <span class="card-title"><span class="cname">${m.name}</span><span class="cjp" lang="ja">${m.jp}</span></span>
+          <span class="card-meta">
+            <span class="lvl" data-l="${m.difficulty}" title="${LEVELS[m.difficulty][0]}"><i></i><i></i><i></i></span>
+            <span>${LEVELS[m.difficulty][0]}</span><span class="sep">·</span>
+            <span>${c.steps.length} steps</span><span class="sep">·</span>
+            <span>${SHAPES_SHORT[m.shape]}</span>
+            ${m.sides === 'two' ? '<span class="two" title="Needs paper colored on both sides">2-sided</span>' : ''}
+          </span>
+        </span>
+      </button>`;
+    }).join('');
+  }
+
+  function applyFilters() {
+    const q = $('#q').value.trim().toLowerCase();
+    let n = 0;
+    $$('.card').forEach((el) => {
+      const ok = matchesModel(MODELS.find((m) => m.id === el.dataset.id), q);
+      el.hidden = !ok;
+      if (ok) n++;
+    });
+    const active = q || Object.values(filters).some((s) => s.size);
+    $('#count').textContent = `${n} ${n === 1 ? 'model' : 'models'}`;
+    $('#clear').hidden = !active;
+    $('#empty').hidden = n > 0;
+    try { localStorage.setItem('ichimai.filters', JSON.stringify(Object.fromEntries(Object.entries(filters).map(([k, s]) => [k, [...s]])))); } catch (e) { /* optional */ }
+  }
+
+  /* ---------- wire up ---------- */
+  buildFilters();
+  buildCards();
+  try {
+    const saved = JSON.parse(localStorage.getItem('ichimai.filters') || 'null');
+    if (saved) for (const k in saved) if (filters[k]) saved[k].forEach((v) => filters[k].add(v));
+  } catch (e) { /* optional */ }
+  $$('.chip').forEach((b) => b.setAttribute('aria-pressed', filters[b.dataset.key].has(b.dataset.v)));
+  applyFilters();
+
+  $('#filters').addEventListener('click', (e) => {
+    const b = e.target.closest('.chip'); if (!b) return;
+    const set = filters[b.dataset.key];
+    set.has(b.dataset.v) ? set.delete(b.dataset.v) : set.add(b.dataset.v);
+    b.setAttribute('aria-pressed', set.has(b.dataset.v));
+    applyFilters();
+  });
+  $('#q').addEventListener('input', applyFilters);
+  const clearAll = () => {
+    Object.values(filters).forEach((s) => s.clear());
+    $$('.chip').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+    $('#q').value = '';
+    applyFilters();
+  };
+  $('#clear').addEventListener('click', clearAll);
+  $('#empty-clear').addEventListener('click', clearAll);
+  $('#grid').addEventListener('click', (e) => {
+    const card = e.target.closest('.card'); if (!card) return;
+    loadModel(card.dataset.id);
+  });
+  $('#dots').addEventListener('click', (e) => {
+    const p = e.target.closest('.pg');
+    if (p) { player.page += +p.dataset.pg; renderSteps(); $(`#dots .pg[data-pg="${p.dataset.pg}"]`)?.focus(); return; }
+    const d = e.target.closest('.sn'); if (d) playStep(+d.dataset.k);
+  });
+  $('#prev').addEventListener('click', () => playStep(player.i - 1));
+  $('#next').addEventListener('click', () => { player.advanced = true; playStep(player.i + 1 < player.c.steps.length ? player.i + 1 : 0); });
+  $('#replay').addEventListener('click', () => playStep(player.i));
+  $('#loop').addEventListener('change', (e) => { player.loop = e.target.checked; if (player.loop && player.done) playStep(player.i); });
+  $('#slow').addEventListener('change', (e) => { player.slow = e.target.checked; });
+  document.addEventListener('keydown', (e) => {
+    if (e.target.closest('input, textarea') && e.target.type !== 'checkbox') return;
+    if (e.key === 'ArrowRight') { e.preventDefault(); player.advanced = true; playStep(player.i + 1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); playStep(player.i - 1); }
+    else if (e.key === 'r' || e.key === 'R') playStep(player.i);
+    else if (e.key === 'l' || e.key === 'L') { const l = $('#loop'); l.checked = !l.checked; l.dispatchEvent(new Event('change')); }
+    else if (e.key === '/') { e.preventDefault(); $('#q').focus(); }
+  });
+
+  const fromHash = location.hash.slice(1);
+  loadModel(compiled.has(fromHash) ? fromHash : 'dog-face');
+})();
+
+</script>
+
+</body>
+</html>
